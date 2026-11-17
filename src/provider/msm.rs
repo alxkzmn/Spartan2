@@ -132,6 +132,7 @@ pub fn msm<C: CurveAffine>(
     });
   }
 
+  #[cfg(not(feature = "aeneas"))]
   let num_threads = if coeffs.len() > 1024 {
     // If the number of coefficients is large, we use parallelism.
     // Otherwise, we use a single thread.
@@ -143,6 +144,7 @@ pub fn msm<C: CurveAffine>(
     1
   };
 
+  #[cfg(not(feature = "aeneas"))]
   let result = if coeffs.len() > num_threads {
     let chunk = coeffs.len() / num_threads;
     coeffs
@@ -153,6 +155,11 @@ pub fn msm<C: CurveAffine>(
   } else {
     cpu_msm_serial(coeffs, bases)
   };
+  // Rayon's worker scheduler can continue an outer loop from an inner loop,
+  // which Aeneas rejects. The existing serial elliptic-curve algorithm avoids
+  // that scheduler and computes the full multi-scalar multiplication.
+  #[cfg(feature = "aeneas")]
+  let result = cpu_msm_serial(coeffs, bases);
 
   verifier_info!(if msm_t.elapsed().as_millis() != 0;
     elapsed_ms = %msm_t.elapsed().as_millis(), size = coeffs.len(), "msm");
