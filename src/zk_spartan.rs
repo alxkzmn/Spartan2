@@ -354,8 +354,11 @@ where
      -> Vec<E::Scalar> {
       let evaluate_with_table =
         |M: &SparseMatrix<E::Scalar>, T_x: &[E::Scalar], T_y: &[E::Scalar]| -> E::Scalar {
-          M.indptr
-            .par_windows(2)
+          #[cfg(not(feature = "aeneas"))]
+          let rows = M.indptr.par_windows(2);
+          #[cfg(feature = "aeneas")]
+          let rows = M.indptr.windows(2);
+          rows
             .enumerate()
             .map(|(row_idx, ptrs)| {
               M.get_row_unchecked(ptrs.try_into().unwrap())
@@ -374,13 +377,25 @@ where
             .sum()
         };
 
+      #[cfg(not(feature = "aeneas"))]
       let (T_x, T_y) = rayon::join(
         || EqPolynomial::evals_from_points(r_x),
         || EqPolynomial::evals_from_points(r_y),
       );
+      // Rayon's worker scheduler can continue an outer loop from an inner
+      // loop, which Aeneas rejects. Evaluate the same tables, matrix rows, and
+      // field sums sequentially so these calculations avoid that scheduler.
+      #[cfg(feature = "aeneas")]
+      let (T_x, T_y) = (
+        EqPolynomial::evals_from_points(r_x),
+        EqPolynomial::evals_from_points(r_y),
+      );
 
-      (0..M_vec.len())
-        .into_par_iter()
+      #[cfg(not(feature = "aeneas"))]
+      let matrices = (0..M_vec.len()).into_par_iter();
+      #[cfg(feature = "aeneas")]
+      let matrices = 0..M_vec.len();
+      matrices
         .map(|i| evaluate_with_table(M_vec[i], &T_x, &T_y))
         .collect()
     };
