@@ -30,7 +30,9 @@ flate2 = "1.0"
 bitvec = "1.0"
 byteorder = "1.4.3"
 thiserror = "2.0.12"
-halo2curves = { version = "0.9.0", features = ["derive_serde", "std"] }
+# This fork separates recursive curve bounds and implements concrete field
+# methods so Aeneas can process those declarations when translating the verifier.
+halo2curves = { git = "https://github.com/alxkzmn/halo2curves.git", rev = "6d407b044c121f39dcceabd1e61ddd0cf8bd1f9d", version = "0.9.0", features = ["derive_serde", "std"] }
 group = "0.13.0"
 once_cell = "1.18.0"
 tracing = "0.1"
@@ -50,6 +52,10 @@ proptest = "1.2.0"
 
 [features]
 default = []
+# Subtle normally uses a volatile raw-pointer read to protect constant-time
+# code from compiler optimization. Aeneas cannot translate that pointer access;
+# select Subtle's supported compiler barrier for the extraction build.
+aeneas = ["subtle/core_hint_black_box"]
 
 [profile.release]
 debug = 1
