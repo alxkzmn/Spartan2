@@ -22,10 +22,22 @@ const PROTOCOL_NAME: [u8; 31] = *b"inner product argument (linear)";
 /// Computes an inner product; extraction builds use a sequential reduction.
 pub(crate) fn inner_product<T: Field + Send + Sync>(a: &[T], b: &[T]) -> T {
   assert_eq!(a.len(), b.len());
-  (0..a.len())
-    .into_par_iter()
-    .map(|i| a[i] * b[i])
-    .reduce(|| T::ZERO, |x, y| x + y)
+  #[cfg(not(feature = "aeneas"))]
+  {
+    (0..a.len())
+      .into_par_iter()
+      .map(|i| a[i] * b[i])
+      .reduce(|| T::ZERO, |x, y| x + y)
+  }
+  // Rayon's worker scheduler can continue an outer loop from an inner loop,
+  // which Aeneas rejects. This sequential fold avoids that scheduler and
+  // computes the same inner product because field addition is associative.
+  #[cfg(feature = "aeneas")]
+  {
+    (0..a.len())
+      .map(|i| a[i] * b[i])
+      .fold(T::ZERO, |x, y| x + y)
+  }
 }
 
 /// An inner product instance consists of a commitment to a vector `a` and another vector `b`
