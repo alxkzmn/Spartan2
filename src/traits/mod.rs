@@ -1,6 +1,6 @@
 //! This module defines various traits required by the users of the library to implement.
 use core::fmt::Debug;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::PrimeField;
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 
@@ -14,12 +14,16 @@ use transcript::{TranscriptEngineTrait, TranscriptReprTrait};
 
 /// Represents an element of a group
 /// This is currently tailored for an elliptic curve group
+// PrimeFieldBits makes Charon extract Bitvec's additional types and trait
+// requirements whenever it extracts Group or Engine. That unused dependency
+// made verifier extraction exceed its time limit. These interfaces only need
+// PrimeField operations, so require those directly.
 pub trait Group: Clone + Copy + Debug + Send + Sync + Sized + Eq + PartialEq {
   /// A type representing an element of the base field of the group
-  type Base: PrimeFieldBits + Serialize + for<'de> Deserialize<'de>;
+  type Base: PrimeField + Serialize + for<'de> Deserialize<'de>;
 
   /// A type representing an element of the scalar field of the group
-  type Scalar: PrimeFieldBits + PrimeFieldExt + Send + Sync + Serialize + for<'de> Deserialize<'de>;
+  type Scalar: PrimeField + PrimeFieldExt + Send + Sync + Serialize + for<'de> Deserialize<'de>;
 
   /// Returns A, B, the order of the group, the size of the base field as big integers
   fn group_params() -> (Self::Base, Self::Base, BigInt, BigInt);
@@ -28,10 +32,10 @@ pub trait Group: Clone + Copy + Debug + Send + Sync + Sized + Eq + PartialEq {
 /// A collection of engines that are required by the library
 pub trait Engine: Clone + Copy + Debug + Send + Sync + Sized + Eq + PartialEq {
   /// A type representing an element of the base field of the group
-  type Base: PrimeFieldBits + TranscriptReprTrait<Self::GE> + Serialize + for<'de> Deserialize<'de>;
+  type Base: PrimeField + TranscriptReprTrait<Self::GE> + Serialize + for<'de> Deserialize<'de>;
 
   /// A type representing an element of the scalar field of the group
-  type Scalar: PrimeFieldBits
+  type Scalar: PrimeField
     + PrimeFieldExt
     + Send
     + Sync
