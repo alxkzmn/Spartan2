@@ -1,6 +1,8 @@
 //! `EqPolynomial`: Represents multilinear extension of equality polynomials, evaluated based on binary input values.
 use crate::zip_with_for_each;
 use ff::PrimeField;
+#[cfg(feature = "aeneas")]
+use itertools::Itertools;
 use rayon::prelude::*;
 
 /// Represents the multilinear extension polynomial (MLE) of the equality polynomial $eq(x,e)$, denoted as $\tilde{eq}(x, e)$.
@@ -61,10 +63,22 @@ impl<Scalar: PrimeField> EqPolynomial<Scalar> {
       let (evals_left, evals_right) = evals.split_at_mut(size);
       let (evals_right, _) = evals_right.split_at_mut(size);
 
+      #[cfg(not(feature = "aeneas"))]
       zip_with_for_each!(par_iter_mut, (evals_left, evals_right), |x, y| {
         *y = *x * r;
         *x -= &*y;
       });
+      // Rayon's worker scheduler can continue an outer loop from an inner
+      // loop, which Aeneas rejects. Use the same independent field updates in
+      // sequence so this calculation does not pull in that scheduler.
+      #[cfg(feature = "aeneas")]
+      {
+        assert_eq!(evals_left.len(), evals_right.len());
+        zip_with_for_each!(iter_mut, (evals_left, evals_right), |x, y| {
+          *y = *x * r;
+          *x -= &*y;
+        });
+      }
 
       size *= 2;
     }
