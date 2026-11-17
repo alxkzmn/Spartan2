@@ -147,37 +147,48 @@ impl<E: Engine> SumcheckProof<E> {
       return Err(SpartanError::InvalidSumcheckProof);
     }
 
-    for (i, poly) in self.compressed_polys.iter().enumerate() {
+    // Aeneas stops translation when a loop can return from its enclosing
+    // function, including through `?`. Record the first error and end the loop
+    // before another transcript operation, then return that same error below.
+    let mut failure = None;
+    let mut i = 0;
+    while i < num_rounds && failure.is_none() {
       let (_round_span, round_t) = start_span!("sumcheck_verify_round", round = i);
-      let poly = poly.decompress(&e);
+      let poly = self.compressed_polys[i].decompress(&e);
       // TODO compute decompress over the LC variables using hinted LC version of e
 
       // verify degree bound
       if poly.degree() != degree_bound {
-        return Err(SpartanError::InvalidSumcheckProof);
+        failure = Some(SpartanError::InvalidSumcheckProof);
+      } else {
+        // // we do not need to check if poly(0) + poly(1) = e, as
+        // // decompress() call above already ensures that holds
+        // debug_assert_eq!(poly.eval_at_zero() + poly.eval_at_one(), e);
+
+        // append the prover's message to the transcript
+        transcript.absorb(b"p", &poly);
+
+        //derive the verifier's challenge for the next round
+        match transcript.squeeze(b"c") {
+          Ok(r_i) => {
+            r.push(r_i);
+
+            // evaluate the claimed degree-ell polynomial at r_i
+            e = poly.evaluate(&r_i);
+            decompress_and_evaluate_lc_poly(degree_bound, &mut lc_poly, r_i);
+            if round_t.elapsed().as_millis() > 0 {
+              info!(elapsed_ms = %round_t.elapsed().as_millis(), "sumcheck_verify_round");
+            }
+          }
+          Err(error) => failure = Some(error),
+        }
       }
-
-      // // we do not need to check if poly(0) + poly(1) = e, as
-      // // decompress() call above already ensures that holds
-      // debug_assert_eq!(poly.eval_at_zero() + poly.eval_at_one(), e);
-
-      // append the prover's message to the transcript
-      transcript.absorb(b"p", &poly);
-
-      //derive the verifier's challenge for the next round
-      let r_i = transcript.squeeze(b"c")?;
-
-      r.push(r_i);
-
-      // evaluate the claimed degree-ell polynomial at r_i
-      e = poly.evaluate(&r_i);
-      decompress_and_evaluate_lc_poly(degree_bound, &mut lc_poly, r_i);
-
-      if round_t.elapsed().as_millis() > 0 {
-        info!(elapsed_ms = %round_t.elapsed().as_millis(), "sumcheck_verify_round");
-      }
+      i += 1;
     }
 
+    if let Some(error) = failure {
+      return Err(error);
+    }
     info!(elapsed_ms = %verify_t.elapsed().as_millis(), "sumcheck_verify");
     Ok((e, r, lc_poly))
   }
