@@ -13,7 +13,13 @@ use rand_core::OsRng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// computes the inner product of two vectors in parallel.
+// This fixed protocol label does not depend on Engine. Passing its array
+// directly lets Aeneas translate the label without also translating the Engine
+// trait requirements of an associated helper. Prover and verifier absorb the
+// same 31 bytes as the original literal.
+const PROTOCOL_NAME: [u8; 31] = *b"inner product argument (linear)";
+
+/// Computes an inner product; extraction builds use a sequential reduction.
 pub(crate) fn inner_product<T: Field + Send + Sync>(a: &[T], b: &[T]) -> T {
   assert_eq!(a.len(), b.len());
   (0..a.len())
@@ -124,10 +130,6 @@ impl<E: Engine> InnerProductArgumentLinear<E>
 where
   E::GE: DlogGroupExt,
 {
-  fn protocol_name() -> &'static [u8] {
-    b"inner product argument (linear)"
-  }
-
   /// Proves the inner product argument
   pub fn prove(
     ck: &[<E::GE as DlogGroup>::AffineGroupElement],
@@ -137,7 +139,7 @@ where
     W: &InnerProductWitness<E>,
     transcript: &mut E::TE,
   ) -> Result<Self, SpartanError> {
-    transcript.dom_sep(Self::protocol_name());
+    transcript.dom_sep(&PROTOCOL_NAME);
 
     // absorb the instance in the transcript
     transcript.absorb(b"U", U);
@@ -185,7 +187,7 @@ where
     U: &InnerProductInstance<E>,
     transcript: &mut E::TE,
   ) -> Result<(), SpartanError> {
-    transcript.dom_sep(Self::protocol_name());
+    transcript.dom_sep(&PROTOCOL_NAME);
 
     // absorb the instance in the transcript
     transcript.absorb(b"U", U);
