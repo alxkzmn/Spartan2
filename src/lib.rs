@@ -45,6 +45,31 @@ macro_rules! start_span {
 }
 pub(crate) use start_span;
 
+// Tracing creates static event metadata that refers back to the event itself.
+// Aeneas rejects these mutually dependent declarations before generating Lean;
+// the verifier's logging and clocks must therefore be removed at compile time.
+// A macro also removes the log arguments, including calls to timer.elapsed().
+// The ordinary build keeps the same spans, timestamps, and events.
+macro_rules! verifier_span {
+    ($($args:tt)*) => {{
+        #[cfg(not(feature = "aeneas"))]
+        { $crate::start_span!($($args)*) }
+        #[cfg(feature = "aeneas")]
+        { ((), ()) }
+    }};
+}
+macro_rules! verifier_info {
+    (if $condition:expr; $($args:tt)*) => {
+        #[cfg(not(feature = "aeneas"))]
+        if $condition { tracing::info!($($args)*); }
+    };
+    ($($args:tt)*) => {
+        #[cfg(not(feature = "aeneas"))]
+        tracing::info!($($args)*);
+    };
+}
+pub(crate) use {verifier_info, verifier_span};
+
 use traits::{Engine, pcs::PCSEngineTrait};
 type CommitmentKey<E> = <<E as traits::Engine>::PCS as PCSEngineTrait<E>>::CommitmentKey;
 type VerifierKey<E> = <<E as traits::Engine>::PCS as PCSEngineTrait<E>>::VerifierKey;

@@ -1,7 +1,7 @@
 //! This module provides a multi-scalar multiplication routine
 //! The generic implementation is adapted from halo2; we add an optimization to commit to bits more efficiently
 //! The specialized implementations are adapted from jolt, with additional optimizations and parallelization.
-use crate::{errors::SpartanError, start_span};
+use crate::{errors::SpartanError, start_span, verifier_info, verifier_span};
 use ff::{Field, PrimeField};
 use halo2curves::{CurveAffine, group::Group};
 use num_integer::Integer;
@@ -124,7 +124,7 @@ pub fn msm<C: CurveAffine>(
   bases: &[C],
   use_parallelism_internally: bool,
 ) -> Result<C::Curve, SpartanError> {
-  let (_msm_span, msm_t) = start_span!("msm", size = coeffs.len());
+  let (_msm_span, msm_t) = verifier_span!("msm", size = coeffs.len());
 
   if coeffs.len() != bases.len() {
     return Err(SpartanError::InvalidInputLength {
@@ -154,9 +154,8 @@ pub fn msm<C: CurveAffine>(
     cpu_msm_serial(coeffs, bases)
   };
 
-  if msm_t.elapsed().as_millis() != 0 {
-    info!(elapsed_ms = %msm_t.elapsed().as_millis(), size = coeffs.len(), "msm");
-  }
+  verifier_info!(if msm_t.elapsed().as_millis() != 0;
+    elapsed_ms = %msm_t.elapsed().as_millis(), size = coeffs.len(), "msm");
   Ok(result)
 }
 

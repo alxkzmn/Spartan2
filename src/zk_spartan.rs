@@ -22,7 +22,7 @@ use crate::{
     traits::{DlogGroup, DlogGroupExt},
   },
   r1cs::{R1CSWitness, SparseMatrix, SplitR1CSInstance, SplitR1CSShape},
-  start_span,
+  start_span, verifier_info, verifier_span,
   traits::{
     Engine,
     circuit::SpartanCircuit,
@@ -239,7 +239,7 @@ where
 
   /// verifies a proof of satisfiability of a `RelaxedR1CS` instance
   fn verify(&self, vk: &Self::VerifierKey) -> Result<Vec<E::Scalar>, SpartanError> {
-    let (_verify_span, verify_t) = start_span!("r1cs_snark_verify");
+    let (_verify_span, verify_t) = verifier_span!("r1cs_snark_verify");
     let mut transcript = E::TE::new(b"R1CSSNARK");
 
     // append the digest of R1CS matrices
@@ -256,24 +256,24 @@ where
       (usize::try_from(num_vars.ilog2()).unwrap() + 1),
     );
 
-    info!(
+    verifier_info!(
       "Verifying R1CS SNARK with {} rounds for outer sum-check and {} rounds for inner sum-check",
       num_rounds_x, num_rounds_y
     );
 
     // outer sum-check
-    let (_tau_span, tau_t) = start_span!("compute_tau_verify");
+    let (_tau_span, tau_t) = verifier_span!("compute_tau_verify");
     let tau = (0..num_rounds_x)
       .map(|_i| transcript.squeeze(b"t"))
       .collect::<Result<EqPolynomial<_>, SpartanError>>()?;
-    info!(elapsed_ms = %tau_t.elapsed().as_millis(), "compute_tau_verify");
+    verifier_info!(elapsed_ms = %tau_t.elapsed().as_millis(), "compute_tau_verify");
 
     transcript.absorb(
       b"outer sumcheck masks",
       &self.ipa_instance_outer.comm_a_vec(),
     );
 
-    let (_outer_sumcheck_span, outer_sumcheck_t) = start_span!("outer_sumcheck_verify");
+    let (_outer_sumcheck_span, outer_sumcheck_t) = verifier_span!("outer_sumcheck_verify");
     let (claim_outer_final, r_x, _outer_lc_poly) =
       self
         .sc_proof_outer
@@ -296,7 +296,7 @@ where
     if claim_outer_final_expected != claim_outer_final - self.ipa_instance_outer.c() {
       return Err(SpartanError::InvalidSumcheckProof);
     }
-    info!(elapsed_ms = %outer_sumcheck_t.elapsed().as_millis(), "outer_sumcheck_verify");
+    verifier_info!(elapsed_ms = %outer_sumcheck_t.elapsed().as_millis(), "outer_sumcheck_verify");
 
     transcript.absorb(
       b"claims_outer",
@@ -309,7 +309,7 @@ where
     );
 
     // inner sum-check
-    let (_inner_sumcheck_span, inner_sumcheck_t) = start_span!("inner_sumcheck_verify");
+    let (_inner_sumcheck_span, inner_sumcheck_t) = verifier_span!("inner_sumcheck_verify");
     let r = transcript.squeeze(b"r")?;
     let claim_inner_joint =
       self.claims_outer.0 + r * self.claims_outer.1 + r * r * self.claims_outer.2;
@@ -347,7 +347,7 @@ where
     };
 
     // compute evaluations of R1CS matrices
-    let (_matrix_eval_span, matrix_eval_t) = start_span!("matrix_evaluations");
+    let (_matrix_eval_span, matrix_eval_t) = verifier_span!("matrix_evaluations");
     let multi_evaluate = |M_vec: &[&SparseMatrix<E::Scalar>],
                           r_x: &[E::Scalar],
                           r_y: &[E::Scalar]|
@@ -392,11 +392,11 @@ where
       return Err(SpartanError::InvalidSumcheckProof);
     }
 
-    info!(elapsed_ms = %matrix_eval_t.elapsed().as_millis(), "matrix_evaluations");
-    info!(elapsed_ms = %inner_sumcheck_t.elapsed().as_millis(), "inner_sumcheck_verify");
+    verifier_info!(elapsed_ms = %matrix_eval_t.elapsed().as_millis(), "matrix_evaluations");
+    verifier_info!(elapsed_ms = %inner_sumcheck_t.elapsed().as_millis(), "inner_sumcheck_verify");
 
     // verify
-    let (_pcs_verify_span, pcs_verify_t) = start_span!("pcs_verify");
+    let (_pcs_verify_span, pcs_verify_t) = verifier_span!("pcs_verify");
     <E as Engine>::PCS::verify(
       &vk.vk_ee,
       &mut transcript,
@@ -405,9 +405,9 @@ where
       &self.eval_W,
       &self.eval_arg,
     )?;
-    info!(elapsed_ms = %pcs_verify_t.elapsed().as_millis(), "pcs_verify");
+    verifier_info!(elapsed_ms = %pcs_verify_t.elapsed().as_millis(), "pcs_verify");
 
-    info!(elapsed_ms = %verify_t.elapsed().as_millis(), "r1cs_snark_verify");
+    verifier_info!(elapsed_ms = %verify_t.elapsed().as_millis(), "r1cs_snark_verify");
     Ok(self.U.public_values.clone())
   }
 }

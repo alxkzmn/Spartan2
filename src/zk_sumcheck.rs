@@ -10,7 +10,7 @@ use crate::{
     multilinear::MultilinearPolynomial,
     univariate::{CompressedUniPoly, UniPoly},
   },
-  start_span,
+  start_span, verifier_info, verifier_span,
   traits::{Engine, transcript::TranscriptEngineTrait},
 };
 use ff::{Field, PrimeField};
@@ -136,7 +136,7 @@ impl<E: Engine> SumcheckProof<E> {
 
     let mut vals = vec![];
     vals.push(claim);
-    let (_verify_span, verify_t) = start_span!("sumcheck_verify");
+    let (_verify_span, verify_t) = verifier_span!("sumcheck_verify");
     let mut e = claim;
     let mut lc_poly = vec![];
 
@@ -153,7 +153,7 @@ impl<E: Engine> SumcheckProof<E> {
     let mut failure = None;
     let mut i = 0;
     while i < num_rounds && failure.is_none() {
-      let (_round_span, round_t) = start_span!("sumcheck_verify_round", round = i);
+      let (_round_span, round_t) = verifier_span!("sumcheck_verify_round", round = i);
       let poly = self.compressed_polys[i].decompress(&e);
       // TODO compute decompress over the LC variables using hinted LC version of e
 
@@ -176,9 +176,8 @@ impl<E: Engine> SumcheckProof<E> {
             // evaluate the claimed degree-ell polynomial at r_i
             e = poly.evaluate(&r_i);
             decompress_and_evaluate_lc_poly(degree_bound, &mut lc_poly, r_i);
-            if round_t.elapsed().as_millis() > 0 {
-              info!(elapsed_ms = %round_t.elapsed().as_millis(), "sumcheck_verify_round");
-            }
+            verifier_info!(if round_t.elapsed().as_millis() > 0;
+              elapsed_ms = %round_t.elapsed().as_millis(), "sumcheck_verify_round");
           }
           Err(error) => failure = Some(error),
         }
@@ -189,7 +188,7 @@ impl<E: Engine> SumcheckProof<E> {
     if let Some(error) = failure {
       return Err(error);
     }
-    info!(elapsed_ms = %verify_t.elapsed().as_millis(), "sumcheck_verify");
+    verifier_info!(elapsed_ms = %verify_t.elapsed().as_millis(), "sumcheck_verify");
     Ok((e, r, lc_poly))
   }
 
